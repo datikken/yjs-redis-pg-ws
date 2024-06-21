@@ -6,7 +6,6 @@ import * as syncProtocol from 'y-protocols/sync.js';
 import * as mutex from 'lib0/mutex';
 import * as encoding from 'lib0/encoding';
 import * as decoding from 'lib0/decoding';
-import Redis from 'ioredis';
 import knex from './knex.js'
 import {pub, sub} from './pubsub.js';
 import { getDocUpdatesFromQueue, pushDocUpdatesToQueue } from './redis.js';
@@ -45,7 +44,7 @@ export default async function setupWSConnection(conn: WebSocket, req: http.Incom
   const docname: string = req.url?.slice(1).split('?')[0] as string;
   const [doc, isNew] = getYDoc(docname);
   doc.conns.set(conn, new Set());
-  
+
   conn.on('message', (message: WSData) => {
     messageListener(conn, req, doc, new Uint8Array(message as ArrayBuffer));
   });
@@ -94,6 +93,8 @@ export default async function setupWSConnection(conn: WebSocket, req: http.Incom
   conn.on('close', () => {
     closeConn(doc, conn);
     clearInterval(pingInterval);
+
+    // console.log(doc.conns) save document clear updates when doc.conns.length === 0
   });
 
   conn.on('pong', () => {
@@ -113,7 +114,7 @@ export default async function setupWSConnection(conn: WebSocket, req: http.Incom
       const encoder = encoding.createEncoder();
       encoding.writeVarUint(encoder, messageAwareness);
       encoding.writeVarUint8Array(encoder, awarenessProtocol.encodeAwarenessUpdate(doc.awareness, Array.from(awarenessStates.keys())));
-      send(doc, conn, encoding.toUint8Array(encoder));      
+      send(doc, conn, encoding.toUint8Array(encoder));
     }
   }
 }
@@ -127,11 +128,11 @@ export const messageListener = async (conn: WebSocket, req: http.IncomingMessage
     case messageSync: {
       encoding.writeVarUint(encoder, messageSync);
       syncProtocol.readSyncMessage(decoder, encoder, doc, conn);
-      
+
       if (encoding.length(encoder) > 1) {
         send(doc, conn, encoding.toUint8Array(encoder));
       }
-  
+
       break;
     }
     case messageAwareness: {
@@ -149,7 +150,7 @@ export const getUpdates = async (doc: WSSharedDoc): Promise<DBUpdate[]> => {
 
   if (updates.length >= updatesLimit) {
     const dbYDoc = new Y.Doc();
-    
+
     dbYDoc.transact(() => {
       for (const u of updates) {
         Y.applyUpdate(dbYDoc, u.update);
@@ -190,7 +191,7 @@ export const closeConn = (doc: WSSharedDoc, conn: WebSocket): void => {
   if (controlledIds) {
     doc.conns.delete(conn);
     awarenessProtocol.removeAwarenessStates(doc.awareness, Array.from(controlledIds), null);
-    
+
     if (doc.conns.size == 0) {
       doc.destroy();
       docs.delete(doc.name);
@@ -274,7 +275,7 @@ export class WSSharedDoc extends Y.Doc {
       encoding.writeVarUint(encoder, messageAwareness);
       encoding.writeVarUint8Array(encoder, awarenessProtocol.encodeAwarenessUpdate(this.awareness, changedClients));
       const buff = encoding.toUint8Array(encoder);
-      
+
       this.conns.forEach((_, c) => {
         send(this, c, buff);
       });
