@@ -2,7 +2,7 @@ import wtf from 'wtfnode';
 import {runTests} from 'lib0/testing.js';
 import { pub, sub } from '../pubsub.js';
 import * as app from './app.test.js';
-import {knex} from '../knex.js';
+import {knex} from '../knex/knex';
 
 if (import.meta.url === `file://${process.argv[1]}`) {
   (async () => {

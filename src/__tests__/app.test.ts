@@ -6,7 +6,7 @@ import yWebSocket from 'y-websocket';
 import range from 'lodash/range.js';
 import { run } from '../app.js';
 import config from "../config.js";
-import { create, drop } from '../tables.js';
+import { create, drop } from '../knex/tables';
 
 const { WebsocketProvider } = yWebSocket;
 

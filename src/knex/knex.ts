@@ -1,7 +1,7 @@
 import Knex from 'knex';
-import config from './config.js';
+import config from "../config";
 import * as Y from "yjs";
-import {WSSharedDoc} from "./WsSharedDoc";
+import {WSSharedDoc} from "../WsSharedDoc";
 
 const updatesLimit = 50;
 

@@ -3,7 +3,7 @@ import { WebSocketServer } from 'ws';
 import http from 'http';
 
 import config from './config.js';
-import { serverLogger } from './logger/index.js';
+import { serverLogger } from './logger';
 import setupWSConnection, { cleanup } from './setupWSConnection.js';
 
 export const app = express();

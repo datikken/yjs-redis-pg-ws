@@ -6,35 +6,35 @@ import config from '../config.js';
 const {createLogger, format, transports} = winston;
 
 const createLoggerForSpecificModule = (component: string): Logger => {
-  const logger = createLogger({
+  return createLogger({
     level: 'info',
     format: format.combine(
-      format.timestamp({
-        format: 'YYYY-MM-DD HH:mm:ss',
-      }),
-      format.errors({ stack: true }),
-      format.splat(),
-      format.json()
+        format.timestamp({
+          format: 'YYYY-MM-DD HH:mm:ss',
+        }),
+        format.errors({stack: true}),
+        format.splat(),
+        format.json()
     ),
-    defaultMeta: { component },
+    defaultMeta: {component},
     transports: [
       new transports.Console({
         level: 'debug',
         handleExceptions: true,
         format: format.combine(
-          format.colorize({ all: true }),
-          format.padLevels(),
-          consoleFormat({
-            showMeta: true,
-            metaStrip: ['timestamp'],
-            inspectOptions: {
-              depth: Infinity,
-              colors: true,
-              maxArrayLength: Infinity,
-              breakLength: 120,
-              compact: Infinity,
-            },
-          })
+            format.colorize({all: true}),
+            format.padLevels(),
+            consoleFormat({
+              showMeta: true,
+              metaStrip: ['timestamp'],
+              inspectOptions: {
+                depth: Infinity,
+                colors: true,
+                maxArrayLength: Infinity,
+                breakLength: 120,
+                compact: Infinity,
+              },
+            })
         ),
       }),
       ...(!config.testing ? [] : [
@@ -48,8 +48,6 @@ const createLoggerForSpecificModule = (component: string): Logger => {
     ],
     exitOnError: false,
   });
-
-  return logger;
 };
 
 export default createLoggerForSpecificModule;
