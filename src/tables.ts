@@ -1,4 +1,4 @@
-import knex from './knex.js';
+import {knex} from './knex.js';
 
 export const create = async () => {
   if (!(await knex.schema.hasTable('items'))) {

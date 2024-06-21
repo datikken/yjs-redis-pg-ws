@@ -3,32 +3,18 @@ import http from 'http';
 import * as Y from 'yjs';
 import * as awarenessProtocol from 'y-protocols/awareness.js'
 import * as syncProtocol from 'y-protocols/sync.js';
-import * as mutex from 'lib0/mutex';
 import * as encoding from 'lib0/encoding';
 import * as decoding from 'lib0/decoding';
-import knex from './knex.js'
-import {pub, sub} from './pubsub.js';
+import {pub} from './pubsub.js';
 import { getDocUpdatesFromQueue, pushDocUpdatesToQueue } from './redis.js';
-import { serverLogger } from './logger/index.js';
+import {WSSharedDoc} from "./WsSharedDoc";
 
 const wsReadyStateConnecting = 0
 const wsReadyStateOpen = 1
-const wsReadyStateClosing = 2 // eslint-disable-line
-const wsReadyStateClosed = 3 // eslint-disable-line
-
-const updatesLimit = 50;
-
-export interface DBUpdate {
-  id: string;
-  docname: string;
-  update: Uint8Array;
-}
 
 export const messageSync = 0;
 export const messageAwareness = 1;
-
 export const pingTimeout = 30000;
-
 export const docs = new Map<string, WSSharedDoc>();
 
 export function cleanup() {
@@ -50,16 +36,16 @@ export default async function setupWSConnection(conn: WebSocket, req: http.Incom
   });
 
   if (isNew) {
-    const persistedUpdates = await getUpdates(doc);
-    const dbYDoc = new Y.Doc()
-
-    dbYDoc.transact(() => {
-      for (const u of persistedUpdates) {
-        Y.applyUpdate(dbYDoc, u.update);
-      }
-    });
-
-    Y.applyUpdate(doc, Y.encodeStateAsUpdate(dbYDoc));
+    // const persistedUpdates = await getUpdates(doc);
+    // const dbYDoc = new Y.Doc()
+    //
+    // dbYDoc.transact(() => {
+    //   for (const u of persistedUpdates) {
+    //     Y.applyUpdate(dbYDoc, u.update);
+    //   }
+    // });
+    //
+    // Y.applyUpdate(doc, Y.encodeStateAsUpdate(dbYDoc));
 
     const redisUpdates = await getDocUpdatesFromQueue(doc);
     const redisYDoc = new Y.Doc();
@@ -145,33 +131,6 @@ export const messageListener = async (conn: WebSocket, req: http.IncomingMessage
   }
 }
 
-export const getUpdates = async (doc: WSSharedDoc): Promise<DBUpdate[]> => {
-  const updates = await knex<DBUpdate>('items').where('docname', doc.name).orderBy('id');
-
-  if (updates.length >= updatesLimit) {
-    const dbYDoc = new Y.Doc();
-
-    dbYDoc.transact(() => {
-      for (const u of updates) {
-        Y.applyUpdate(dbYDoc, u.update);
-      }
-    });
-
-    const [mergedUpdates] = await Promise.all([
-      knex<DBUpdate>('items').insert({docname: doc.name, update: Y.encodeStateAsUpdate(dbYDoc)}).returning('*'),
-      knex('items').where('docname', doc.name).whereIn('id', updates.map(({id}) => id)).delete()
-    ]);
-
-    return mergedUpdates;
-  } else {
-    return updates;
-  }
-}
-
-export const persistUpdate = async (doc: WSSharedDoc, update: Uint8Array): Promise<void> => {
-  await knex('items').insert({docname: doc.name, update});
-}
-
 export const getYDoc = (docname: string, gc=true): [WSSharedDoc, boolean] => {
   const existing = docs.get(docname);
   if (existing) {
@@ -236,72 +195,13 @@ export const updateHandler = async (update: Uint8Array, origin: any, doc: WSShar
 
     propagateUpdate(doc, update);
 
-    persistUpdate(doc, update)
-      .catch((err) => {
-        serverLogger.error(err);
-        closeConn(doc, origin);
-      })
-    ;
+    // persistUpdate(doc, update)
+    //   .catch((err) => {
+    //     serverLogger.error(err);
+    //     closeConn(doc, origin);
+    //   })
+    // ;
   } else {
     propagateUpdate(doc, update);
-  }
-}
-
-export class WSSharedDoc extends Y.Doc {
-  name: string;
-  awarenessChannel: string;
-  mux: mutex.mutex;
-  conns: Map<WebSocket, Set<number>>;
-  awareness: awarenessProtocol.Awareness;
-
-  constructor(name: string) {
-    super();
-
-    this.name = name;
-    this.awarenessChannel = `${name}-awareness`
-    this.mux = mutex.createMutex();
-    this.conns = new Map();
-    this.awareness = new awarenessProtocol.Awareness(this);
-
-    const awarenessChangeHandler = ({added, updated, removed}: {added: number[], updated: number[], removed: number[]}, origin: any) => {
-      const changedClients = added.concat(updated, removed);
-      const connControlledIds = this.conns.get(origin);
-      if (connControlledIds) {
-        added.forEach(clientId => { connControlledIds.add(clientId); });
-        removed.forEach(clientId => { connControlledIds.delete(clientId); });
-      }
-
-      const encoder = encoding.createEncoder();
-      encoding.writeVarUint(encoder, messageAwareness);
-      encoding.writeVarUint8Array(encoder, awarenessProtocol.encodeAwarenessUpdate(this.awareness, changedClients));
-      const buff = encoding.toUint8Array(encoder);
-
-      this.conns.forEach((_, c) => {
-        send(this, c, buff);
-      });
-    }
-
-    this.awareness.on('update', awarenessChangeHandler);
-    this.on('update', updateHandler);
-
-    sub.subscribe([this.name, this.awarenessChannel]).then(() => {
-      sub.on('messageBuffer', (channel, update) => {
-        const channelId = channel.toString();
-
-        // update is a Buffer, Buffer is a subclass of Uint8Array, update can be applied
-        // as an update directly
-
-        if (channelId === this.name) {
-          Y.applyUpdate(this, update, sub);
-        } else if (channelId === this.awarenessChannel) {
-          awarenessProtocol.applyAwarenessUpdate(this.awareness, update, sub);
-        }
-      })
-    })
-  }
-
-  destroy() {
-    super.destroy();
-    sub.unsubscribe([this.name, this.awarenessChannel]);
   }
 }

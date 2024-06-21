@@ -1,6 +1,6 @@
 import Redis from 'ioredis';
 import config from './config.js';
-import { WSSharedDoc } from './setupWSConnection.js';
+import { WSSharedDoc } from './WsSharedDoc';
 
 const redis = new Redis(config.redis);
 
@@ -18,12 +18,12 @@ export const pushDocUpdatesToQueue = async (doc: WSSharedDoc, update: Uint8Array
     redis.pipeline()
       .lpopBuffer(getDocUpdatesKey(doc))
       .rpushBuffer(getDocUpdatesKey(doc), Buffer.from(update))
-      .expire(getDocUpdatesKey(doc), 300)
+      // .expire(getDocUpdatesKey(doc), 300)
       .exec()
   } else {
     await redis.pipeline()
       .rpushBuffer(getDocUpdatesKey(doc), Buffer.from(update))
-      .expire(getDocUpdatesKey(doc), 300)
+      // .expire(getDocUpdatesKey(doc), 300)
       .exec();
   }
 }
